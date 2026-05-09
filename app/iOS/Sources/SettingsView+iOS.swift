@@ -54,7 +54,10 @@ struct SettingsViewiOS: View {
                             .foregroundStyle(.secondary)
                     }
                     Link(destination: URL(string: "https://peerdrop.app/privacy.html")!) {
-                        Label("Privacy Policy", systemImage: "chevron.left.forwardslash.chevron.right")
+                        Label("Privacy Policy", systemImage: "lock")
+                    }
+                    Link(destination: URL(string: "https://peerdrop.app/terms.html")!) {
+                        Label("Terms of Use", systemImage: "checkmark.shield")
                     }
                 }
             }
