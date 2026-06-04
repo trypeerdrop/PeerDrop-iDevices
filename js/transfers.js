@@ -1,4 +1,17 @@
 // transfers.js — File and directory transfer engine using protomux binary channels.
+//
+// Channel design:
+//   'peerdrop/control'  id=null        — shared JSON signalling (owned by app.js)
+//   'peerdrop/transfer' id=transferId  — per-file raw binary stream
+//
+// Race-condition-free channel setup:
+//   pairTransferChannels(mux) registers mux.pair('peerdrop/transfer') on each
+//   new connection. When the sender opens a txCh, the pair notify fires
+//   SYNCHRONOUSLY and opens rxCh immediately — before protomux can reject the
+//   incoming session. The rxCh delegates its callbacks to the transfers map,
+//   which is populated by onOffer (arriving on the control channel). Because
+//   the data channel only carries bytes and the done signal, the write stream
+//   just needs to be in the map before the first chunk arrives — not before rxCh.open().
 
 const crypto   = require('hypercore-crypto')
 const fs       = require('bare-fs')
@@ -43,7 +56,7 @@ class TransferManager {
         messages: [
           {
             encoding:  c.buffer,
-            onmessage: (chunk) => this._onRawChunk(transferId, chunk)
+            onmessage: (chunk) => this._onRawChunk(transferId, chunk, mux)
           },
           {
             encoding:  c.json,
@@ -213,13 +226,25 @@ class TransferManager {
   }
 
   // Called by rxCh message[0].onmessage (registered in pairTransferChannels)
-  _onRawChunk (transferId, chunk) {
+  _onRawChunk (transferId, chunk, mux) {
     const t = this._transfers.get(transferId)
     if (!t?.writeStream) return
 
-    t.writeStream.write(chunk)
     t.received += chunk.length
     this._reportReceiveProgress(t)
+
+    // Disk backpressure: write() returns false when the OS write buffer is full.
+    // If we kept writing regardless, a fast network + slow disk would buffer the
+    // whole file in memory. Pause the incoming mux stream until it drains.
+    const ok = t.writeStream.write(chunk)
+    if (!ok && mux?.stream && !t.paused) {
+      t.paused = true
+      mux.stream.pause()
+      t.writeStream.once('drain', () => {
+        t.paused = false
+        mux.stream.resume()
+      })
+    }
   }
 
   // Called by rxCh message[1].onmessage — all chunks received, finish the file
