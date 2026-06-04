@@ -1,17 +1,4 @@
 // transfers.js — File and directory transfer engine using protomux binary channels.
-//
-// Channel design:
-//   'peerdrop/control'  id=null        — shared JSON signalling (owned by app.js)
-//   'peerdrop/transfer' id=transferId  — per-file raw binary stream
-//
-// Race-condition-free channel setup:
-//   pairTransferChannels(mux) registers mux.pair('peerdrop/transfer') on each
-//   new connection. When the sender opens a txCh, the pair notify fires
-//   SYNCHRONOUSLY and opens rxCh immediately — before protomux can reject the
-//   incoming session. The rxCh delegates its callbacks to the transfers map,
-//   which is populated by onOffer (arriving on the control channel). Because
-//   the data channel only carries bytes and the done signal, the write stream
-//   just needs to be in the map before the first chunk arrives — not before rxCh.open().
 
 const crypto   = require('hypercore-crypto')
 const fs       = require('bare-fs')
@@ -323,7 +310,7 @@ class TransferManager {
     batch.bytesFromDoneFiles += transfer.fileSize
     this._transfers.delete(transfer.transferId)
 
-    const progress = Math.min(batch.bytesFromDoneFiles / (batch.totalSize || 1), 0.99)
+    const progress = this._batchProgress(batch.bytesFromDoneFiles, batch.totalSize)
     this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
 
     if (batch.filesSent >= batch.fileCount) {
@@ -350,6 +337,7 @@ class TransferManager {
       batchId, destDir, dirName,
       fileCount, totalSize,
       filesReceived: 0,
+      bytesFromDoneFiles: 0,   // byte-based progress, mirrors the sender
       senderNoiseKey,
       lastProgressAt: 0
     })
@@ -359,7 +347,8 @@ class TransferManager {
     const batch = this._batches.get(t.batchId)
     if (!batch) return
     batch.filesReceived++
-    const progress = Math.min(batch.filesReceived / batch.fileCount, 0.99)
+    batch.bytesFromDoneFiles += t.fileSize
+    const progress = this._batchProgress(batch.bytesFromDoneFiles, batch.totalSize)
     this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
   }
 
@@ -385,7 +374,7 @@ class TransferManager {
       const batch = this._batches.get(transfer.batchId)
       if (!batch) return
       const done     = batch.bytesFromDoneFiles + transfer.sent
-      const progress = Math.min(done / (batch.totalSize || 1), 0.99)
+      const progress = this._batchProgress(done, batch.totalSize)
       this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
     } else {
       const progress = Math.min(transfer.sent / (transfer.fileSize || 1), 1)
@@ -401,10 +390,8 @@ class TransferManager {
     if (t.batchId) {
       const batch = this._batches.get(t.batchId)
       if (!batch) return
-      const progress = Math.min(
-        (batch.filesReceived + (t.received / (t.fileSize || 1))) / batch.fileCount,
-        0.99
-      )
+      const done     = batch.bytesFromDoneFiles + t.received
+      const progress = this._batchProgress(done, batch.totalSize)
       this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
     } else {
       const progress = Math.min(t.received / (t.fileSize || 1), 1)
@@ -451,6 +438,12 @@ class TransferManager {
     }
     walk(dirPath)
     return results
+  }
+
+  // Batch progress caps at 0.99 until batchComplete arrives, so the bar never
+  // shows 100% before the directory is fully flushed to disk.
+  _batchProgress (doneBytes, totalBytes) {
+    return Math.min(doneBytes / (totalBytes || 1), 0.99)
   }
 
   _uniquePath (dir, name) {

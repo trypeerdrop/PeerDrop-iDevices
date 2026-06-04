@@ -12,6 +12,7 @@ struct App: SwiftUI.App {
     var body: some Scene {
         MenuBarExtra("PeerDrop", systemImage: "drop.fill") {
             ContentView()
+                .frame(height: 300)
                 .environmentObject(worker)
                 .onAppear {
                     if !hasCompletedOnboarding {
