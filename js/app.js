@@ -50,11 +50,6 @@ class PeerDrop {
       this._forgetPeer(peerDiscoveryKey)
     })
 
-    this.proto.onSetDeviceName(({ deviceName }) => {
-      this.deviceName = deviceName || null
-      this._startSwarm()                          // safe to connect once name known
-    })
-
     this.proto.onSendFile(({ filePath, peerId }) => {
       this._sendFile(filePath, peerId).catch(err =>
         console.error('[peerdrop] send error:', err.message)
@@ -65,6 +60,9 @@ class PeerDrop {
   // ── Boot ────────────────────────────────────────────────────────────────────
 
   async _init () {
+    const argv = (typeof Bare !== 'undefined' && Bare.argv) || []
+    this.deviceName = argv[1] || null
+
     const { discoveryPublicKey } = await store.loadIdentity()
     this.discoveryPublicKey = discoveryPublicKey
 
