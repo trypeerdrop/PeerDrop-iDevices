@@ -15,7 +15,7 @@ targets:
         com.apple.security.application-groups:
           - group.to.foss.peerdrop
     sources:
-      - path: app/iOS-Share
+      - path: app/iOS-Share-Extension
         type: group
-      - path: shared/swift/AppGroup.swift
-      - path: shared/swift/Models/PeerDevice.swift
+      - path: app/shared/Sources/AppGroup.swift
+      - path: app/shared/Sources/Models/PeerDevice.swift

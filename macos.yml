@@ -13,7 +13,7 @@ targets:
       - package: BareRPC
     sources:
       - app/macOS
-      - shared
+      - app/shared
     resources: 
       - path: app/iOS/app.bundle
     configFiles:
