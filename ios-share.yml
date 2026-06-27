@@ -7,15 +7,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: to.foss.peerdrop.share
-        INFOPLIST_FILE: app/iOS-Share/Info.plist
+        INFOPLIST_FILE: app/iOS-Share-Extension/Info.plist
         SWIFT_COMPILATION_MODE: wholemodule
     entitlements:
-      path: app/iOS-Share/App.entitlements
+      path: app/iOS-Share-Extension/App.entitlements
       properties:
         com.apple.security.application-groups:
           - group.to.foss.peerdrop
     sources:
-      - path: app/iOS-Share-Extension
-        type: group
+      - app/iOS-Share-Extension
       - path: app/shared/Sources/AppGroup.swift
       - path: app/shared/Sources/Models/PeerDevice.swift
