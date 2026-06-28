@@ -9,6 +9,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: to.foss.peerdrop.share
         INFOPLIST_FILE: app/iOS-Share-Extension/Info.plist
         SWIFT_COMPILATION_MODE: wholemodule
+    dependencies:
+      - framework: frameworks/BareKit.xcframework
+      - package: BareKit
+      - package: BareRPC
     entitlements:
       path: app/iOS-Share-Extension/App.entitlements
       properties:
@@ -16,5 +20,4 @@ targets:
           - group.to.foss.peerdrop
     sources:
       - app/iOS-Share-Extension
-      - path: app/shared/Sources/AppGroup.swift
-      - path: app/shared/Sources/Models/PeerDevice.swift
+      - app/shared/
