@@ -9,6 +9,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: to.foss.peerdrop.share
         INFOPLIST_FILE: app/iOS-Share-Extension/Info.plist
         SWIFT_COMPILATION_MODE: wholemodule
+        
+        # Lets shared code (app/shared/) detect at compile time that it's being
+        # built into an extension, where things like UIApplication.shared are
+        # unavailable. See ReviewPromptView.swift's #if !APP_EXTENSION guard.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_EXTENSION
     dependencies:
       - framework: frameworks/BareKit.xcframework
       - package: BareKit

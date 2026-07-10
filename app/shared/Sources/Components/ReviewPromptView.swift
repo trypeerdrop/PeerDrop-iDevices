@@ -98,10 +98,18 @@ struct ReviewPromptView: View {
         UserDefaults.standard.set(true, forKey: "hasPromptedForReview")
 
         #if os(iOS)
+        // UIApplication.shared is unavailable when this file is compiled into
+        // an app extension target (e.g. the Share Extension, which also builds
+        // app/shared/). APP_EXTENSION is a custom flag set only on the
+        // Share Extension target's build settings (see ios-share.yml) — Xcode
+        // does not define one automatically. Skip the review prompt there;
+        // it should only ever fire from the main app anyway.
+        #if !APP_EXTENSION
         if let scene = UIApplication.shared.connectedScenes
             .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
             SKStoreReviewController.requestReview(in: scene)
         }
+        #endif
         #elseif os(macOS)
         SKStoreReviewController.requestReview()
         #endif
