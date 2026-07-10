@@ -17,6 +17,7 @@ class Worker: ObservableObject {
     @Published var knownDevices:    [PeerDevice]   = []
     @Published var activeTransfers: [FileTransfer] = []
     @Published var downloadPath:    String         = ""
+    @Published var showReviewPrompt: Bool         = false
 
     // MARK: - Computed sections
 

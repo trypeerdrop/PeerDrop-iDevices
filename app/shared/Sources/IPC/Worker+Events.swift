@@ -119,6 +119,13 @@ extension Worker: PeerDropEvents {
                     ? "\(t.fileName) saved to downloads folder"
                     : "\(t.fileName) sent successfully"
             )
+            
+            // Trigger review prompt after a successful transfer, if not already prompted.
+            if !UserDefaults.standard.bool(forKey: "hasPromptedForReview") {
+                DispatchQueue.main.async {
+                    self.showReviewPrompt = true
+                }
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             self.activeTransfers.removeAll { $0.id == id }
