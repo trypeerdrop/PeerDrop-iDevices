@@ -22,6 +22,11 @@ struct RootView: View {
                 .tabItem {
                     Label("Received", systemImage: "tray.and.arrow.down.fill")
                 }
+            
+            SettingsViewiOS()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
         }
         .sheet(isPresented: $worker.showReviewPrompt) {
             ReviewPromptView()
