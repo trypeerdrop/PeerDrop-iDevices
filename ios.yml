@@ -14,7 +14,7 @@ targets:
       - target: PeerDrop-iOS-Share    # uncomment when App Group provisioning is ready
     sources:
       - app/iOS
-      - shared
+      - app/shared
     resources:
       - path: app/iOS/app.bundle
     configFiles:

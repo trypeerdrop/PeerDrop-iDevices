@@ -56,7 +56,7 @@ class TransferManager {
         messages: [
           {
             encoding:  c.buffer,
-            onmessage: (chunk) => this._onRawChunk(transferId, chunk)
+            onmessage: (chunk) => this._onRawChunk(transferId, chunk, mux)
           },
           {
             encoding:  c.json,
@@ -226,13 +226,25 @@ class TransferManager {
   }
 
   // Called by rxCh message[0].onmessage (registered in pairTransferChannels)
-  _onRawChunk (transferId, chunk) {
+  _onRawChunk (transferId, chunk, mux) {
     const t = this._transfers.get(transferId)
     if (!t?.writeStream) return
 
-    t.writeStream.write(chunk)
     t.received += chunk.length
     this._reportReceiveProgress(t)
+
+    // Disk backpressure: write() returns false when the OS write buffer is full.
+    // If we kept writing regardless, a fast network + slow disk would buffer the
+    // whole file in memory. Pause the incoming mux stream until it drains.
+    const ok = t.writeStream.write(chunk)
+    if (!ok && mux?.stream && !t.paused) {
+      t.paused = true
+      mux.stream.pause()
+      t.writeStream.once('drain', () => {
+        t.paused = false
+        mux.stream.resume()
+      })
+    }
   }
 
   // Called by rxCh message[1].onmessage — all chunks received, finish the file
@@ -323,7 +335,7 @@ class TransferManager {
     batch.bytesFromDoneFiles += transfer.fileSize
     this._transfers.delete(transfer.transferId)
 
-    const progress = Math.min(batch.bytesFromDoneFiles / (batch.totalSize || 1), 0.99)
+    const progress = this._batchProgress(batch.bytesFromDoneFiles, batch.totalSize)
     this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
 
     if (batch.filesSent >= batch.fileCount) {
@@ -350,6 +362,7 @@ class TransferManager {
       batchId, destDir, dirName,
       fileCount, totalSize,
       filesReceived: 0,
+      bytesFromDoneFiles: 0,   // byte-based progress, mirrors the sender
       senderNoiseKey,
       lastProgressAt: 0
     })
@@ -359,7 +372,8 @@ class TransferManager {
     const batch = this._batches.get(t.batchId)
     if (!batch) return
     batch.filesReceived++
-    const progress = Math.min(batch.filesReceived / batch.fileCount, 0.99)
+    batch.bytesFromDoneFiles += t.fileSize
+    const progress = this._batchProgress(batch.bytesFromDoneFiles, batch.totalSize)
     this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
   }
 
@@ -385,7 +399,7 @@ class TransferManager {
       const batch = this._batches.get(transfer.batchId)
       if (!batch) return
       const done     = batch.bytesFromDoneFiles + transfer.sent
-      const progress = Math.min(done / (batch.totalSize || 1), 0.99)
+      const progress = this._batchProgress(done, batch.totalSize)
       this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
     } else {
       const progress = Math.min(transfer.sent / (transfer.fileSize || 1), 1)
@@ -401,10 +415,8 @@ class TransferManager {
     if (t.batchId) {
       const batch = this._batches.get(t.batchId)
       if (!batch) return
-      const progress = Math.min(
-        (batch.filesReceived + (t.received / (t.fileSize || 1))) / batch.fileCount,
-        0.99
-      )
+      const done     = batch.bytesFromDoneFiles + t.received
+      const progress = this._batchProgress(done, batch.totalSize)
       this._emit(CMD_TRANSFER_PROGRESS, { transferId: batch.batchId, progress })
     } else {
       const progress = Math.min(t.received / (t.fileSize || 1), 1)
@@ -451,6 +463,12 @@ class TransferManager {
     }
     walk(dirPath)
     return results
+  }
+
+  // Batch progress caps at 0.99 until batchComplete arrives, so the bar never
+  // shows 100% before the directory is fully flushed to disk.
+  _batchProgress (doneBytes, totalBytes) {
+    return Math.min(doneBytes / (totalBytes || 1), 0.99)
   }
 
   _uniquePath (dir, name) {

@@ -1,4 +1,6 @@
-import BareRPC
+//  Worker.swift — application layer (UI-facing state).
+//
+
 import Foundation
 #if canImport(AppKit)
 import AppKit
@@ -15,6 +17,7 @@ class Worker: ObservableObject {
     @Published var knownDevices:    [PeerDevice]   = []
     @Published var activeTransfers: [FileTransfer] = []
     @Published var downloadPath:    String         = ""
+    @Published var showReviewPrompt: Bool         = false
 
     // MARK: - Computed sections
 
@@ -24,33 +27,35 @@ class Worker: ObservableObject {
     // MARK: - Internal
 
     let bridge = IPCBridge()
+    private(set) var proto: PeerDropProtocol!
     var noiseToDiscovery: [String: String] = [:]
 
     // MARK: - Init
 
     init() {
-        setupEventHandlers()
+        // Build the protocol layer on top of the bridge, with self as the
+        // event sink. This replaces the old setupEventHandlers() + RPCDelegate.
+        proto = PeerDropProtocol(bridge: bridge, events: self)
         Task { await bridge.start() }
     }
 
-    // MARK: - Public API
+    // MARK: - Public intent API (views call these)
 
-    /// Send a file — fire and forget, no reply needed, safe for multiple concurrent calls
     func sendFile(at url: URL, to discoveryKey: String) {
-        bridge.event(Cmd.sendFile, body: ["filePath": url.path, "peerId": discoveryKey])
+        proto.sendFile(path: url.path, peerID: discoveryKey)
     }
 
     func connectPeer(peerID: String) {
-        fireAndForget(Cmd.connectPeer, body: ["peerID": peerID])
+        proto.connectPeer(peerID: peerID)
     }
 
     func forgetPeer(discoveryKey: String) {
-        fireAndForget(Cmd.forgetPeer, body: ["peerDiscoveryKey": discoveryKey])
+        proto.forgetPeer(discoveryKey: discoveryKey)
     }
 
     func setDownloadPath(_ path: String) {
         DispatchQueue.main.async { self.downloadPath = path }
-        fireAndForget(Cmd.setDownloadPath, body: ["downloadPath": path])
+        proto.setDownloadPath(path)
     }
 
     // MARK: - Pending transfer from Share Extension
@@ -63,14 +68,6 @@ class Worker: ObservableObject {
     }
 
     // MARK: - Helpers
-
-    /// Use for commands that need a reply — avoid for high-frequency calls
-    func fireAndForget(_ command: UInt, body: [String: Any]) {
-        Task {
-            do { _ = try await bridge.request(command, body: body) }
-            catch { print("❌ RPC \(command): \(error)") }
-        }
-    }
 
     func systemImage(for platform: String) -> String {
         switch platform.lowercased() {

@@ -1,6 +1,11 @@
 import BareKit
 import BareRPC
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 final class IPCBridge {
 
@@ -10,7 +15,13 @@ final class IPCBridge {
 
     init() {
         worklet = Worklet()
-        worklet.start(name: "app", ofType: "bundle")
+
+        // Argument slot convention shared with Android (see app.js _init):
+        //   argv[0] = filesDir   (unused on Apple platforms → empty string)
+        //   argv[1] = deviceName (real name; JS uses it before any peer connects
+        //                         so the first handshake isn't "localhost")
+        let deviceName = IPCBridge.resolveDeviceName()
+        worklet.start(name: "app", ofType: "bundle", arguments: ["", deviceName])
 
         let ipc      = IPC(worklet: worklet)
         let delegate = _Delegate(ipc: ipc)
@@ -44,6 +55,18 @@ final class IPCBridge {
     func suspend()   { worklet.suspend() }
     func resume()    { worklet.resume() }
     func terminate() { worklet.terminate() }
+
+    /// Real, user-facing device name. os.hostname() returns "localhost" inside
+    /// the iOS sandbox, so we resolve it natively and hand it to JS at startup.
+    static func resolveDeviceName() -> String {
+        #if canImport(UIKit)
+        return UIDevice.current.name
+        #elseif canImport(AppKit)
+        return Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+        #else
+        return ProcessInfo.processInfo.hostName
+        #endif
+    }
 }
 
 // MARK: - Private delegate
